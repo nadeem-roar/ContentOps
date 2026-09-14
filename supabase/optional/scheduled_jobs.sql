@@ -51,9 +51,9 @@ revoke all on function call_worker(text) from public;
 
 -- Uploads approved creatives into the client Drive folders.
 select cron.schedule(
-  'contentops-drive-sync',
+  'contentops-file-creatives',
   '*/5 * * * *',
-  $$select call_worker('/api/cron/drive-sync')$$
+  $$select call_worker('/api/cron/file-creatives')$$
 );
 
 -- Advances cards whose publish slot has arrived.
@@ -68,5 +68,5 @@ select cron.schedule(
 --   select * from cron.job_run_details order by start_time desc limit 20;
 --
 -- Remove with:
---   select cron.unschedule('contentops-drive-sync');
+--   select cron.unschedule('contentops-file-creatives');
 --   select cron.unschedule('contentops-scheduler');

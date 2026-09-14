@@ -131,6 +131,9 @@ create index content_items_scheduled_idx on content_items (scheduled_for)
 
 -- ---------------------------------------------------------------- assets
 
+-- Creatives live in Google Drive and nowhere else. A row here is a pointer plus the
+-- workflow state around it; the bytes are never copied into Postgres or object storage,
+-- so there is exactly one copy of every file and one answer to "which version is real".
 create table content_assets (
   id                 uuid primary key default gen_random_uuid(),
   content_item_id    uuid not null references content_items (id) on delete cascade,
@@ -139,13 +142,15 @@ create table content_assets (
   file_name          text not null,
   mime_type          text,
   byte_size          bigint,
-  storage_path       text,
-  drive_file_id      text,
+  -- Set at upload time; the file exists in Drive before this row does.
+  drive_file_id      text not null,
   drive_url          text,
-  -- Stamped once the Drive sync worker confirms the upload.
-  synced_to_drive_at timestamptz,
-  sync_error         text,
-  sync_attempts      integer not null default 0,
+  -- The Drive folder the file currently sits in: Working/ until approved, Final/ after.
+  drive_parent_id    text,
+  -- Stamped once the file has been moved into Final/ and renamed to the convention.
+  filed_at           timestamptz,
+  filing_error       text,
+  filing_attempts    integer not null default 0,
   uploaded_by        uuid references profiles (id) on delete set null,
   created_at         timestamptz not null default now(),
   unique (content_item_id, version)
@@ -153,9 +158,9 @@ create table content_assets (
 
 create index content_assets_item_idx on content_assets (content_item_id, version desc);
 
--- Drives the Drive-sync queue: final assets that have not landed in Drive yet.
-create index content_assets_pending_sync_idx on content_assets (created_at)
-  where kind = 'final' and synced_to_drive_at is null;
+-- Drives the filing queue: approved creatives still sitting in Working/.
+create index content_assets_pending_filing_idx on content_assets (created_at)
+  where kind = 'final' and filed_at is null;
 
 -- ---------------------------------------------------------------- comments (the inbox)
 

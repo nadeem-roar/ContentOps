@@ -48,12 +48,12 @@ const asset = (over: Partial<ContentAsset> = {}): ContentAsset => ({
   file_name: 'teaser.png',
   mime_type: 'image/png',
   byte_size: 1024,
-  storage_path: 'creatives/card-1/v1.png',
-  drive_file_id: null,
+  drive_file_id: 'drive-file-1',
   drive_url: null,
-  synced_to_drive_at: null,
-  sync_error: null,
-  sync_attempts: 0,
+  drive_parent_id: 'working-folder',
+  filed_at: null,
+  filing_error: null,
+  filing_attempts: 0,
   uploaded_by: 'user-2',
   created_at: '2026-09-14T00:00:00Z',
   ...over,
@@ -121,8 +121,8 @@ describe('conditionsMatch', () => {
 describe('evaluate', () => {
   it('ignores disabled rules and other triggers', () => {
     const rules = [
-      rule({ id: 'a', is_enabled: false, actions: [{ type: 'queue_drive_sync' }] }),
-      rule({ id: 'b', trigger: 'schedule.due', actions: [{ type: 'queue_drive_sync' }] }),
+      rule({ id: 'a', is_enabled: false, actions: [{ type: 'queue_drive_filing' }] }),
+      rule({ id: 'b', trigger: 'schedule.due', actions: [{ type: 'queue_drive_filing' }] }),
     ];
     expect(evaluate(rules, event()).effects).toEqual([]);
   });
@@ -196,11 +196,11 @@ describe('evaluate', () => {
     expect(evaluate(rules, dated).effects).toEqual([]);
   });
 
-  it('marks the highest-version asset final and queues the Drive sync', () => {
+  it('marks the highest-version asset final and queues the Drive filing', () => {
     const rules = [
       rule({
         conditions: { to_stage: 'approved' },
-        actions: [{ type: 'mark_latest_asset_final' }, { type: 'queue_drive_sync' }],
+        actions: [{ type: 'mark_latest_asset_final' }, { type: 'queue_drive_filing' }],
       }),
     ];
 
@@ -211,7 +211,7 @@ describe('evaluate', () => {
 
     expect(evaluate(rules, approved).effects).toEqual([
       { type: 'mark_asset_final', assetId: 'v3', ruleId: 'rule-1' },
-      { type: 'queue_drive_sync', ruleId: 'rule-1' },
+      { type: 'queue_drive_filing', ruleId: 'rule-1' },
     ]);
   });
 

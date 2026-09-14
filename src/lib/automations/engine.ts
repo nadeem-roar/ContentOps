@@ -143,8 +143,8 @@ export function evaluate(rules: AutomationRule[], event: AutomationEvent): Evalu
           break;
         }
 
-        case 'queue_drive_sync': {
-          effects.push({ type: 'queue_drive_sync', ruleId: rule.id });
+        case 'queue_drive_filing': {
+          effects.push({ type: 'queue_drive_filing', ruleId: rule.id });
           break;
         }
 

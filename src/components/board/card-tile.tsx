@@ -21,7 +21,7 @@ export interface BoardCardRow extends ContentItem {
   asset_count: number;
   unresolved_comment_count: number;
   latest_asset_version: number | null;
-  has_unsynced_final: boolean | null;
+  has_unfiled_final: boolean | null;
 }
 
 const PRIORITY_STYLES: Record<string, string> = {
@@ -117,10 +117,10 @@ export function CardTile({ card, isOverlay }: { card: BoardCardRow; isOverlay?: 
           </span>
         ) : null}
 
-        {card.has_unsynced_final ? (
-          <span className="flex items-center gap-1 text-amber-600" title="Waiting to reach Drive">
+        {card.has_unfiled_final ? (
+          <span className="flex items-center gap-1 text-amber-600" title="Waiting to be filed into Drive">
             <CloudUpload className="h-3.5 w-3.5" />
-            syncing
+            filing
           </span>
         ) : null}
 

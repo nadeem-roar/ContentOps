@@ -74,23 +74,83 @@ export async function ensureFolder(name: string, parentId: string): Promise<stri
 }
 
 /**
- * Builds (or reuses) the folder path a finished creative belongs in:
- *   <root>/<Client>/<Campaign>/Final
- * Cards with no campaign land under an "Unassigned" campaign folder so nothing is
- * silently dropped at the client root.
+ * Builds (or reuses) the folder path for a campaign:
+ *   <root>/<Client>/<Campaign>/{Working,Final}
+ *
+ * Uploads land in Working/ and are moved to Final/ on approval, so Drive mirrors the
+ * board rather than only receiving the end result. Cards with no campaign land under an
+ * "Unassigned" campaign folder so nothing is silently dropped at the client root.
  */
-export async function ensureCampaignFolder(
+export async function ensureCampaignFolders(
   clientName: string,
   campaignName: string | null,
-): Promise<{ clientFolderId: string; campaignFolderId: string; finalFolderId: string }> {
+): Promise<{
+  clientFolderId: string;
+  campaignFolderId: string;
+  workingFolderId: string;
+  finalFolderId: string;
+}> {
   const root = process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID;
   if (!root) throw new Error('GOOGLE_DRIVE_ROOT_FOLDER_ID is not set');
 
   const clientFolderId = await ensureFolder(clientName, root);
   const campaignFolderId = await ensureFolder(campaignName || 'Unassigned', clientFolderId);
+
+  // Sequential, not parallel: both calls would otherwise race to create the parent.
+  const workingFolderId = await ensureFolder('Working', campaignFolderId);
   const finalFolderId = await ensureFolder('Final', campaignFolderId);
 
-  return { clientFolderId, campaignFolderId, finalFolderId };
+  return { clientFolderId, campaignFolderId, workingFolderId, finalFolderId };
+}
+
+/**
+ * Moves a file between folders and renames it in one call. Used to promote an approved
+ * creative from Working/ to Final/ under the naming convention.
+ */
+export async function moveAndRename(params: {
+  fileId: string;
+  fromParentId: string | null;
+  toParentId: string;
+  name: string;
+}): Promise<string> {
+  const drive = getDrive();
+
+  const updated = await drive.files.update({
+    fileId: params.fileId,
+    addParents: params.toParentId,
+    removeParents: params.fromParentId ?? undefined,
+    requestBody: { name: params.name },
+    fields: 'id, webViewLink',
+    supportsAllDrives: true,
+  });
+
+  return (
+    updated.data.webViewLink ?? `https://drive.google.com/file/d/${params.fileId}/view`
+  );
+}
+
+/** Streams a file's bytes back out of Drive, for serving previews through the app. */
+export async function downloadFile(fileId: string): Promise<{
+  stream: NodeJS.ReadableStream;
+  mimeType: string;
+}> {
+  const drive = getDrive();
+
+  const meta = await drive.files.get({
+    fileId,
+    fields: 'mimeType',
+    supportsAllDrives: true,
+  });
+
+  const res = await drive.files.get(
+    { fileId, alt: 'media', supportsAllDrives: true },
+    { responseType: 'stream' },
+  );
+
+  return {
+    stream: res.data as unknown as NodeJS.ReadableStream,
+    mimeType: meta.data.mimeType ?? 'application/octet-stream',
+  };
 }
 
 export interface UploadResult {
@@ -98,17 +158,24 @@ export interface UploadResult {
   webViewLink: string;
 }
 
+/**
+ * Accepts a stream so a 500 MB video is never held in memory on its way to Drive.
+ * A Buffer is still accepted for small, already-materialised payloads.
+ */
 export async function uploadFile(params: {
   name: string;
   mimeType: string;
   parentId: string;
-  body: Buffer;
+  body: Buffer | NodeJS.ReadableStream;
 }): Promise<UploadResult> {
   const drive = getDrive();
 
   const created = await drive.files.create({
     requestBody: { name: params.name, parents: [params.parentId] },
-    media: { mimeType: params.mimeType, body: Readable.from(params.body) },
+    media: {
+      mimeType: params.mimeType,
+      body: Buffer.isBuffer(params.body) ? Readable.from(params.body) : params.body,
+    },
     fields: 'id, webViewLink',
     supportsAllDrives: true,
   });

@@ -12,36 +12,7 @@ insert into board_columns (key, name, stage, position, wip_limit, default_role) 
   ('scheduled',  'Scheduled',      'scheduled',  7, null, 'scheduler'),
   ('published',  'Published',      'published',  8, null, null);
 
--- ---------------------------------------------------------------- storage
-
-insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-values (
-  'creatives',
-  'creatives',
-  false,
-  524288000, -- 500 MB
-  array[
-    'image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/svg+xml',
-    'video/mp4', 'video/quicktime', 'application/pdf',
-    'application/vnd.openxmlformats-officedocument.presentationml.presentation'
-  ]
-)
-on conflict (id) do nothing;
-
-create policy "members read creatives" on storage.objects
-  for select using (bucket_id = 'creatives' and is_active_member());
-
-create policy "members upload creatives" on storage.objects
-  for insert with check (
-    bucket_id = 'creatives'
-    and has_role('admin', 'manager', 'strategist', 'designer')
-  );
-
-create policy "members update creatives" on storage.objects
-  for update using (
-    bucket_id = 'creatives'
-    and has_role('admin', 'manager', 'strategist', 'designer')
-  );
+-- No storage bucket: creatives live in Google Drive. See content_assets in 0001.
 
 -- ---------------------------------------------------------------- default automations
 -- These are data, not code, so the team can retune them in the Automations screen without
@@ -79,14 +50,14 @@ insert into automations (name, description, trigger, conditions, actions) values
    ]'::jsonb
 ),
 (
-  'Approved creatives go to Drive',
-  'Marks the latest creative final and queues it for upload into the client Drive folder.',
+  'File approved creatives',
+  'Marks the latest creative final and files it into the campaign Final folder in Drive.',
   'card.moved',
   '{"to_stage": "approved"}'::jsonb,
   '[
      {"type": "mark_latest_asset_final"},
-     {"type": "queue_drive_sync"},
-     {"type": "notify_assignee", "message": "Approved and syncing to Drive."}
+     {"type": "queue_drive_filing"},
+     {"type": "notify_assignee", "message": "Approved and filing to Drive."}
    ]'::jsonb
 ),
 (

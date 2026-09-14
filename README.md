@@ -12,8 +12,8 @@ Idea ──► Briefing ──► Copywriting ──► Design ──► Review 
                                                               │              └─► scheduler cron
                                                               │                  advances the card
                                                               └─► marks latest creative final
-                                                                  ──► drive-sync cron uploads to
-                                                                      /Client/Campaign/Final/
+                                                                  ──► filing cron moves it from
+                                                                      Working/ to Final/ in Drive
 ```
 
 Every arrow is a rule in the `automations` table, not hard-coded logic. The engine that
@@ -27,16 +27,29 @@ covered by unit tests rather than by clicking through the UI.
 | Route work to the right desk | On entering a column, assigns the least-loaded person in that column's role and sets a due date two business days out. Never reassigns work someone already holds. |
 | Design needs a brief | Blocks the move into Design until the caption is filled in. |
 | Review needs a creative | Blocks the move into Review until a creative is uploaded. |
-| Approved creatives go to Drive | Marks the highest version final and queues the Drive upload. |
+| File approved creatives | Marks the highest version final and queues the move into the campaign's Final folder. |
 | Nothing gets scheduled without a slot | Blocks the move into Scheduled until a publish date and time exist. |
 | Publish on the slot | When the publish time arrives, the card moves to Published. |
 
 A blocked move applies nothing at all — the card stays put and the person is told why.
 Half-applied moves are the mess this tool exists to prevent.
 
-### Drive naming
+### Where creatives live
 
-Files land as `client_campaign_channel-format_date_vN.ext`, for example
+**Google Drive, and nowhere else.** An upload streams straight into the campaign's
+`Working/` folder; approval moves that same file into `Final/` and renames it. Postgres
+stores only the row: title, caption, version, comments, Drive file id.
+
+```
+<root>/<Client>/<Campaign>/Working/   uploads land here
+<root>/<Client>/<Campaign>/Final/     approved creatives move here, renamed
+```
+
+Nothing is ever copied, so there is one copy of each file and one answer to "which
+version is real". It also keeps the app off object storage entirely, which is what lets
+Supabase stay on the free tier no matter how much video the team produces.
+
+Filed creatives are named `client_campaign_channel-format_date_vN.ext`, for example
 `acme-coffee-co_spring-launch_instagram-carousel_2026-10-02_v3.png`. Versioning is
 assigned by the database, so nobody types "final_v2_FINAL".
 
@@ -100,7 +113,7 @@ npm run dev
 npm run dev        # local dev server
 npm run build      # production build
 npm run typecheck  # tsc --noEmit
-npm test           # automation engine + Drive naming tests
+npm test           # automation engine, cron auth, Drive naming
 npm run db:types   # regenerate database types from the linked project
 ```
 
@@ -115,11 +128,16 @@ creatives never reach Drive and scheduled cards never advance.
 
 | Endpoint | Cadence | Does |
 | --- | --- | --- |
-| `/api/cron/drive-sync` | every 5 min | Uploads approved creatives to Drive |
+| `/api/cron/file-creatives` | every 5 min | Moves approved creatives into Drive `Final/` |
 | `/api/cron/scheduler` | every 10 min | Advances cards whose publish slot has arrived |
 
-Both authenticate with `Authorization: Bearer $CRON_SECRET` and are excluded from the auth
-middleware. Set `CRON_SECRET` before the first deploy, or both return 401.
+Both are excluded from the auth middleware and accept either scheme:
+
+- `x-roar-cron-secret: $ROAR_CRON_SECRET` for Roar AI Cloud scheduled jobs, where the
+  platform injects the secret and sets the header
+- `Authorization: Bearer $CRON_SECRET` for Vercel Cron, pg_cron, and manual testing
+
+Set at least one before the first deploy, or both routes return 401 and nothing runs.
 
 ### Container (self-hosted platforms)
 
@@ -141,8 +159,18 @@ The container listens on `3000` and serves an unauthenticated liveness probe at
 For the schedule, either use the platform's own cron, or run it from Postgres by applying
 `supabase/optional/scheduled_jobs.sql` — that uses `pg_cron` + `pg_net` to call the two
 endpoints, so the workers keep running regardless of where the app is hosted. Read the
-header of that file first; it needs two database settings, and applying it **on Vercel
-would double-fire** the jobs that `vercel.json` already registers.
+header of that file first; it needs two database settings, and applying it alongside a
+platform scheduler **would double-fire** both jobs.
+
+### Roar AI Cloud
+
+Deploys from `main` on push. Skip its managed Postgres — the wizard detects Supabase and
+pre-selects "I already have one". Register the two workers as scheduled jobs pointing at
+the paths above; the platform supplies `ROAR_CRON_SECRET` itself.
+
+Fill every secret **before** the first launch. `NEXT_PUBLIC_*` values are inlined into the
+client bundle at build time, so adding them afterwards leaves the browser bundle holding
+empty strings until the next rebuild, and sign-in fails with nothing useful in the logs.
 
 ### Vercel
 
@@ -155,20 +183,21 @@ src/
   app/
     (app)/          board, calendar, campaigns, inbox — everything behind auth
     actions/        server actions: card moves, comments, asset uploads
-    api/cron/       drive-sync and scheduler workers
+    api/cron/       creative filing and scheduler workers
     auth/           OAuth callback with domain enforcement
   components/       board, calendar, inbox, and UI primitives
   lib/
     automations/    the rules engine (pure) and its effect applier
-    drive/          Drive client, filename convention, sync worker
+    drive/          Drive client, filename convention, filing worker
     supabase/       browser, server, and service-role clients
 supabase/migrations/
 ```
 
 ## Notes on data handling
 
-- Client names, creative assets, and campaign detail are confidential. They stay in the
-  company Supabase project, the company Drive, and the company Vercel account.
+- Client names, creative assets, and campaign detail are confidential. Creatives live in
+  the company Google Drive; metadata lives in the company Supabase project.
 - RLS is on for every table. The service-role key bypasses it and is used only by the two
   cron workers.
-- Storage objects are private; the bucket has no public read policy.
+- There is no object storage and no public bucket. Drive files inherit the permissions of
+  the folder they sit in, so access is governed by Google Workspace.

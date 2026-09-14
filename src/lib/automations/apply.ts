@@ -42,7 +42,7 @@ export async function leastLoadedForRole(
 export interface ApplyResult {
   patch: Partial<ContentItem>;
   notifications: string[];
-  queuedDriveSync: boolean;
+  queuedDriveFiling: boolean;
   appliedRuleIds: string[];
 }
 
@@ -59,7 +59,7 @@ export async function applyEffects(
   const patch: Partial<ContentItem> = {};
   const notifications: string[] = [];
   const appliedRuleIds: string[] = [];
-  let queuedDriveSync = false;
+  let queuedDriveFiling = false;
 
   for (const effect of effects) {
     appliedRuleIds.push(effect.ruleId);
@@ -89,11 +89,11 @@ export async function applyEffects(
         break;
       }
 
-      case 'queue_drive_sync': {
-        // The worker picks up final assets with no synced_to_drive_at, so marking the
-        // asset final is itself the enqueue. This flag just tells the caller to nudge
-        // the worker instead of waiting for the next cron tick.
-        queuedDriveSync = true;
+      case 'queue_drive_filing': {
+        // The worker picks up final assets with no filed_at, so marking the asset final
+        // is itself the enqueue. This flag just tells the caller to nudge the worker
+        // instead of waiting for the next cron tick.
+        queuedDriveFiling = true;
         break;
       }
 
@@ -126,5 +126,5 @@ export async function applyEffects(
     );
   }
 
-  return { patch, notifications, queuedDriveSync, appliedRuleIds };
+  return { patch, notifications, queuedDriveFiling, appliedRuleIds };
 }

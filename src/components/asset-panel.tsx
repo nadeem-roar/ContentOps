@@ -4,7 +4,7 @@ import { useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { format, parseISO } from 'date-fns';
 import { CloudUpload, ExternalLink, Upload } from 'lucide-react';
-import { markAssetFinal, uploadAsset } from '@/app/actions/assets';
+import { markAssetFinal } from '@/app/actions/assets';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import type { ContentAsset } from '@/lib/types';
@@ -16,13 +16,26 @@ export function AssetPanel({ cardId, assets }: { cardId: string; assets: Content
   const [error, setError] = useState<string | null>(null);
 
   function onFile(file: File) {
-    const formData = new FormData();
-    formData.set('contentItemId', cardId);
-    formData.set('file', file);
+    // Sent as a raw body, not multipart, so the server can pipe it straight to Drive
+    // without holding a 500 MB video in memory.
+    const url =
+      `/api/assets/upload?cardId=${encodeURIComponent(cardId)}` +
+      `&fileName=${encodeURIComponent(file.name)}`;
 
     startTransition(async () => {
-      const result = await uploadAsset(formData);
-      setError(result.ok ? null : (result.error ?? 'Upload failed.'));
+      try {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'content-type': file.type || 'application/octet-stream' },
+          body: file,
+        });
+
+        const result = await response.json().catch(() => ({}));
+        setError(response.ok ? null : (result.error ?? 'Upload failed.'));
+      } catch {
+        setError('Upload failed. Check your connection and try again.');
+      }
+
       if (inputRef.current) inputRef.current.value = '';
       router.refresh();
     });
@@ -57,7 +70,8 @@ export function AssetPanel({ cardId, assets }: { cardId: string; assets: Content
 
       {assets.length === 0 ? (
         <p className="mt-3 text-sm text-muted-foreground">
-          No creatives yet. Review is blocked until something is uploaded.
+          No creatives yet. Uploads go straight to the campaign&rsquo;s Working folder in
+          Drive. Review is blocked until something is uploaded.
         </p>
       ) : (
         <ul className="mt-3 divide-y">
@@ -74,10 +88,10 @@ export function AssetPanel({ cardId, assets }: { cardId: string; assets: Content
               </span>
 
               <div className="ml-auto flex items-center gap-2">
-                {asset.kind === 'final' && !asset.synced_to_drive_at ? (
+                {asset.kind === 'final' && !asset.filed_at ? (
                   <span className="flex items-center gap-1 text-xs text-amber-600">
                     <CloudUpload className="h-3.5 w-3.5" />
-                    {asset.sync_error ? 'sync failed' : 'syncing to Drive'}
+                    {asset.filing_error ? 'filing failed' : 'filing to Drive'}
                   </span>
                 ) : null}
 
@@ -88,7 +102,7 @@ export function AssetPanel({ cardId, assets }: { cardId: string; assets: Content
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1 text-xs underline"
                   >
-                    In Drive
+                    {asset.filed_at ? 'In Final' : 'In Working'}
                     <ExternalLink className="h-3 w-3" />
                   </a>
                 ) : null}
@@ -109,8 +123,8 @@ export function AssetPanel({ cardId, assets }: { cardId: string; assets: Content
                 ) : null}
               </div>
 
-              {asset.sync_error ? (
-                <p className="w-full text-xs text-destructive">{asset.sync_error}</p>
+              {asset.filing_error ? (
+                <p className="w-full text-xs text-destructive">{asset.filing_error}</p>
               ) : null}
             </li>
           ))}

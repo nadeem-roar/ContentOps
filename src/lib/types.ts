@@ -129,12 +129,15 @@ export interface ContentAsset {
   file_name: string;
   mime_type: string | null;
   byte_size: number | null;
-  storage_path: string | null;
-  drive_file_id: string | null;
+  /** Creatives live only in Drive; this is the single source of the bytes. */
+  drive_file_id: string;
   drive_url: string | null;
-  synced_to_drive_at: string | null;
-  sync_error: string | null;
-  sync_attempts: number;
+  /** Working/ until approved, Final/ afterwards. */
+  drive_parent_id: string | null;
+  /** Set once the file has been moved into Final/ and renamed to the convention. */
+  filed_at: string | null;
+  filing_error: string | null;
+  filing_attempts: number;
   uploaded_by: string | null;
   created_at: string;
 }
@@ -158,5 +161,5 @@ export interface BoardCard extends ContentItem {
   assignee: Pick<Profile, 'id' | 'full_name' | 'avatar_url'> | null;
   asset_count: number;
   unresolved_comment_count: number;
-  latest_asset: Pick<ContentAsset, 'id' | 'storage_path' | 'mime_type' | 'version'> | null;
+  latest_asset: Pick<ContentAsset, 'id' | 'drive_file_id' | 'mime_type' | 'version'> | null;
 }

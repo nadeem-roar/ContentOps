@@ -15,10 +15,10 @@ select
   coalesce(a.asset_count, 0)     as asset_count,
   coalesce(cm.open_comments, 0)  as unresolved_comment_count,
   a.latest_asset_id,
-  a.latest_asset_path,
+  a.latest_asset_drive_id,
   a.latest_asset_mime,
   a.latest_asset_version,
-  a.has_unsynced_final
+  a.has_unfiled_final
 from content_items i
 join clients c on c.id = i.client_id
 left join campaigns ca on ca.id = i.campaign_id
@@ -27,10 +27,10 @@ left join lateral (
   select
     count(*)                                                    as asset_count,
     (array_agg(x.id           order by x.version desc))[1]      as latest_asset_id,
-    (array_agg(x.storage_path order by x.version desc))[1]      as latest_asset_path,
+    (array_agg(x.drive_file_id  order by x.version desc))[1]     as latest_asset_drive_id,
     (array_agg(x.mime_type    order by x.version desc))[1]      as latest_asset_mime,
     max(x.version)                                              as latest_asset_version,
-    bool_or(x.kind = 'final' and x.synced_to_drive_at is null)  as has_unsynced_final
+    bool_or(x.kind = 'final' and x.filed_at is null)            as has_unfiled_final
   from content_assets x
   where x.content_item_id = i.id
 ) a on true

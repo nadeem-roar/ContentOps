@@ -1,17 +1,12 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { isAuthorizedCron } from '@/lib/cron-auth';
 import { evaluate } from '@/lib/automations/engine';
 import { applyEffects } from '@/lib/automations/apply';
 import type { AutomationEvent, AutomationRule } from '@/lib/automations/types';
 import type { BoardColumn, ContentAsset, ContentItem } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
-
-function authorized(request: NextRequest): boolean {
-  const secret = process.env.CRON_SECRET;
-  if (!secret) return false;
-  return request.headers.get('authorization') === `Bearer ${secret}`;
-}
 
 /**
  * Moves scheduled cards on once their publish slot arrives.
@@ -21,7 +16,7 @@ function authorized(request: NextRequest): boolean {
  * type to the engine, not rewriting this route.
  */
 export async function POST(request: NextRequest) {
-  if (!authorized(request)) {
+  if (!isAuthorizedCron(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 

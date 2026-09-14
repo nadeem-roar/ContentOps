@@ -30,7 +30,7 @@ export type AutomationAction =
   | { type: 'require_fields'; fields: (keyof ContentItem)[]; message?: string }
   | { type: 'require_asset'; message?: string }
   | { type: 'mark_latest_asset_final' }
-  | { type: 'queue_drive_sync' }
+  | { type: 'queue_drive_filing' }
   | { type: 'notify_assignee'; message: string }
   | { type: 'move_to_column'; column: string };
 
@@ -63,7 +63,7 @@ export type AutomationEffect =
   | { type: 'assign_profile'; profileId: string; ruleId: string }
   | { type: 'set_due_date'; date: string; ruleId: string }
   | { type: 'mark_asset_final'; assetId: string; ruleId: string }
-  | { type: 'queue_drive_sync'; ruleId: string }
+  | { type: 'queue_drive_filing'; ruleId: string }
   | { type: 'notify'; message: string; ruleId: string }
   | { type: 'move_to_column'; columnKey: string; ruleId: string };
 

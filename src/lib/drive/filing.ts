@@ -86,7 +86,7 @@ export async function fileApprovedAssets(
           drive_url: driveUrl,
           filed_at: new Date().toISOString(),
           filing_error: null,
-          filing_attempts: (asset.filing_attempts ?? 0) + 1,
+          // Not incremented: the count gates retries, so it has to mean failures.
         })
         .eq('id', asset.id);
 

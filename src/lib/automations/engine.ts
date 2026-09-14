@@ -24,8 +24,14 @@ export function addBusinessDays(from: Date, days: number): Date {
   return result;
 }
 
+/**
+ * The local calendar date. Not toISOString(), which converts to UTC first: a due date
+ * worked out at 8am in Sydney would come back stamped as the previous day.
+ */
 function toDateOnly(date: Date): string {
-  return date.toISOString().slice(0, 10);
+  const month = `${date.getMonth() + 1}`.padStart(2, '0');
+  const day = `${date.getDate()}`.padStart(2, '0');
+  return `${date.getFullYear()}-${month}-${day}`;
 }
 
 export function conditionsMatch(

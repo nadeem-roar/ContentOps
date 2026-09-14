@@ -41,7 +41,13 @@ export function CalendarGrid({
   const [selected, setSelected] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const month = parseISO(monthStart);
+  // The server sends UTC midnight on the 1st. parseISO would convert that into local
+  // time, which lands in the previous month for anyone west of UTC and renders the whole
+  // grid a month out, so read the year and month off the string and build a local date.
+  const month = useMemo(() => {
+    const [year, monthOfYear] = monthStart.slice(0, 7).split('-').map(Number);
+    return new Date(year, monthOfYear - 1, 1);
+  }, [monthStart]);
 
   const days = useMemo(
     () =>

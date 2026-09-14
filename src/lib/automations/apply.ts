@@ -44,12 +44,21 @@ export interface ApplyResult {
   notifications: string[];
   queuedDriveFiling: boolean;
   appliedRuleIds: string[];
+  /**
+   * The writes the effects imply, held back until the caller has actually written the
+   * card. Call it once the move has landed; skip it if the write was refused.
+   */
+  commit: () => Promise<void>;
 }
 
 /**
  * Turns effects into a patch for the card plus any side writes. Returns the patch rather
  * than writing the card itself, so the caller can fold it into the same update that moves
  * the card and avoid a second round trip.
+ *
+ * Nothing here writes. Everything an effect implies beyond the patch is deferred into
+ * `commit`, because the card update can still be refused after this runs — by a WIP limit
+ * or by RLS — and a refused move must leave nothing behind.
  */
 export async function applyEffects(
   supabase: SupabaseClient,
@@ -59,6 +68,7 @@ export async function applyEffects(
   const patch: Partial<ContentItem> = {};
   const notifications: string[] = [];
   const appliedRuleIds: string[] = [];
+  const assetsToFinalise: string[] = [];
   let queuedDriveFiling = false;
 
   for (const effect of effects) {
@@ -82,10 +92,10 @@ export async function applyEffects(
       }
 
       case 'mark_asset_final': {
-        await supabase
-          .from('content_assets')
-          .update({ kind: 'final' })
-          .eq('id', effect.assetId);
+        // Deferred, not written here: marking an asset final is what enqueues it for
+        // filing into Drive, so doing it now would file a creative for a move that the
+        // database may still refuse.
+        assetsToFinalise.push(effect.assetId);
         break;
       }
 
@@ -114,17 +124,23 @@ export async function applyEffects(
     }
   }
 
-  if (appliedRuleIds.length > 0) {
-    const unique = [...new Set(appliedRuleIds)];
-    await Promise.all(
-      unique.map((id) =>
-        supabase.rpc('bump_automation_run', { rule_id: id }).then(
-          () => undefined,
-          () => undefined, // Telemetry must never fail a card move.
-        ),
-      ),
-    );
-  }
+  const commit = async () => {
+    for (const assetId of assetsToFinalise) {
+      await supabase.from('content_assets').update({ kind: 'final' }).eq('id', assetId);
+    }
 
-  return { patch, notifications, queuedDriveFiling, appliedRuleIds };
+    if (appliedRuleIds.length > 0) {
+      const unique = [...new Set(appliedRuleIds)];
+      await Promise.all(
+        unique.map((id) =>
+          supabase.rpc('bump_automation_run', { rule_id: id }).then(
+            () => undefined,
+            () => undefined, // Telemetry must never fail a card move.
+          ),
+        ),
+      );
+    }
+  };
+
+  return { patch, notifications, queuedDriveFiling, appliedRuleIds, commit };
 }

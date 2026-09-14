@@ -1,4 +1,4 @@
-import { Readable } from 'node:stream';
+import { Readable, Transform } from 'node:stream';
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import { createClient } from '@/lib/supabase/server';
@@ -22,6 +22,34 @@ const ALLOWED_TYPES = new Set([
 ]);
 
 const UPLOAD_ROLES = ['admin', 'manager', 'strategist', 'designer'];
+
+/**
+ * Caps what actually reaches Drive, and counts it.
+ *
+ * `content-length` is only a hint: it is client-supplied, and a chunked upload omits it
+ * entirely, so checking the header alone lets an unbounded stream through. This stops the
+ * stream at the limit instead of trusting the claim, and reports the real byte count so
+ * the recorded size is measured rather than declared.
+ */
+function limitBytes(source: NodeJS.ReadableStream, max: number) {
+  const state = { bytes: 0, exceeded: false };
+
+  const stream = source.pipe(
+    new Transform({
+      transform(chunk: Buffer, _encoding, callback) {
+        state.bytes += chunk.length;
+        if (state.bytes > max) {
+          state.exceeded = true;
+          callback(new Error('Upload exceeds the size limit.'));
+          return;
+        }
+        callback(null, chunk);
+      },
+    }),
+  );
+
+  return { stream, state };
+}
 
 /**
  * Uploads a creative straight into the campaign's Working/ folder in Drive.
@@ -59,6 +87,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // A cheap early rejection for honest clients. The stream is capped for the rest.
   const declaredSize = Number(request.headers.get('content-length') ?? 0);
   if (declaredSize > MAX_BYTES) {
     return NextResponse.json({ error: 'That file is over the 500 MB limit.' }, { status: 413 });
@@ -97,6 +126,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Card not found.' }, { status: 404 });
   }
 
+  const counted = limitBytes(Readable.fromWeb(request.body as any), MAX_BYTES);
+
   try {
     const { workingFolderId } = await ensureCampaignFolders(
       item.client.name,
@@ -107,14 +138,14 @@ export async function POST(request: NextRequest) {
       name: params.data.fileName,
       mimeType,
       parentId: workingFolderId,
-      body: Readable.fromWeb(request.body as any),
+      body: counted.stream,
     });
 
     const { error } = await supabase.from('content_assets').insert({
       content_item_id: params.data.cardId,
       file_name: params.data.fileName,
       mime_type: mimeType,
-      byte_size: declaredSize || null,
+      byte_size: counted.state.bytes || null,
       drive_file_id: uploaded.fileId,
       drive_url: uploaded.webViewLink,
       drive_parent_id: workingFolderId,
@@ -133,6 +164,12 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ ok: true, driveUrl: uploaded.webViewLink });
   } catch (err) {
+    // Checked on the flag rather than the error, because the stream error reaches here
+    // having passed through the Drive client and may not arrive intact.
+    if (counted.state.exceeded) {
+      return NextResponse.json({ error: 'That file is over the 500 MB limit.' }, { status: 413 });
+    }
+
     const message = err instanceof Error ? err.message : 'Upload failed.';
     return NextResponse.json({ error: message }, { status: 500 });
   }

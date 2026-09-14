@@ -26,12 +26,18 @@ export async function markAssetFinal(assetId: string) {
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: 'Not signed in.' };
 
-  const { error } = await supabase
+  const { data: updated, error } = await supabase
     .from('content_assets')
     .update({ kind: 'final' })
-    .eq('id', assetId);
+    .eq('id', assetId)
+    .select('id');
 
   if (error) return { ok: false, error: error.message };
+
+  // RLS drops the row instead of raising, so an empty result is a refusal, not a no-op.
+  if (!updated || updated.length === 0) {
+    return { ok: false, error: 'Only admins, managers, strategists and designers can mark a creative final.' };
+  }
 
   revalidatePath('/board');
   return { ok: true };

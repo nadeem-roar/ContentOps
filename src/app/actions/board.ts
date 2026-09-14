@@ -79,9 +79,9 @@ export async function moveCard(input: z.infer<typeof moveSchema>): Promise<Actio
     return { ok: false, blockers: blockers.map((b) => b.message) };
   }
 
-  const { patch, notifications } = await applyEffects(supabase, event, effects);
+  const { patch, notifications, commit } = await applyEffects(supabase, event, effects);
 
-  const { error } = await supabase
+  const { data: moved, error } = await supabase
     .from('content_items')
     .update({
       ...patch,
@@ -89,12 +89,22 @@ export async function moveCard(input: z.infer<typeof moveSchema>): Promise<Actio
       column_id: patch.column_id ?? toColumnId,
       position: positionBetween(beforePosition, afterPosition),
     })
-    .eq('id', cardId);
+    .eq('id', cardId)
+    .select('id');
 
   if (error) {
     // WIP limits and stage guards surface as check violations from the database.
     return { ok: false, blockers: [error.message] };
   }
+
+  // RLS filters a forbidden update out rather than failing it, so "no error" is not the
+  // same as "it happened". Everyone starts as a viewer, who cannot write cards at all.
+  if (!moved || moved.length === 0) {
+    return { ok: false, error: 'You do not have permission to move this card.' };
+  }
+
+  // Only now that the card has genuinely moved: mark assets final, tick telemetry.
+  await commit();
 
   await supabase.from('activity').insert({
     entity_type: 'content_item',
@@ -125,12 +135,16 @@ export async function scheduleCard(input: z.infer<typeof scheduleSchema>): Promi
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: 'Not signed in.' };
 
-  const { error } = await supabase
+  const { data: updated, error } = await supabase
     .from('content_items')
     .update({ scheduled_for: parsed.data.scheduledFor })
-    .eq('id', parsed.data.cardId);
+    .eq('id', parsed.data.cardId)
+    .select('id');
 
   if (error) return { ok: false, error: error.message };
+  if (!updated || updated.length === 0) {
+    return { ok: false, error: 'You do not have permission to schedule this card.' };
+  }
 
   await supabase.from('activity').insert({
     entity_type: 'content_item',
@@ -162,8 +176,21 @@ export async function updateCard(input: z.infer<typeof updateSchema>): Promise<A
   const { cardId, ...fields } = parsed.data;
   const supabase = await createClient();
 
-  const { error } = await supabase.from('content_items').update(fields).eq('id', cardId);
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: 'Not signed in.' };
+
+  const { data: updated, error } = await supabase
+    .from('content_items')
+    .update(fields)
+    .eq('id', cardId)
+    .select('id');
+
   if (error) return { ok: false, error: error.message };
+  if (!updated || updated.length === 0) {
+    return { ok: false, error: 'You do not have permission to edit this card.' };
+  }
 
   revalidatePath('/board');
   return { ok: true };

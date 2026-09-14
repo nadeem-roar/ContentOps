@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
       continue;
     }
 
-    const { patch } = await applyEffects(supabase, event, effects);
+    const { patch, commit } = await applyEffects(supabase, event, effects);
 
     if (Object.keys(patch).length === 0) {
       skipped.push({ id: card.id, reason: 'No rule matched' });
@@ -73,6 +73,8 @@ export async function POST(request: NextRequest) {
       skipped.push({ id: card.id, reason: error.message });
       continue;
     }
+
+    await commit();
 
     await supabase.from('activity').insert({
       entity_type: 'content_item',

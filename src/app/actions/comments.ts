@@ -50,12 +50,20 @@ export async function resolveThread(commentId: string) {
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: 'Not signed in.' };
 
-  const { error } = await supabase
+  const { data: updated, error } = await supabase
     .from('comments')
     .update({ resolved_at: new Date().toISOString(), resolved_by: user.id })
-    .eq('id', commentId);
+    .eq('id', commentId)
+    .select('id');
 
   if (error) return { ok: false, error: error.message };
+
+  // Only the author or an admin may resolve, and RLS enforces that by filtering rather
+  // than failing. Without this check the caller is told a thread was resolved when it
+  // was not.
+  if (!updated || updated.length === 0) {
+    return { ok: false, error: 'Only the person who wrote this comment, or an admin, can resolve it.' };
+  }
 
   revalidatePath('/inbox');
   return { ok: true };

@@ -56,8 +56,9 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // Everything except static assets and the cron endpoints, which authenticate
-    // with a bearer token rather than a session.
-    '/((?!_next/static|_next/image|favicon.ico|api/cron|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    // Everything except static assets, the cron endpoints (which authenticate with a
+    // bearer token rather than a session), and the health probe (which must answer 200
+    // to an unauthenticated orchestrator or the container gets restart-looped).
+    '/((?!_next/static|_next/image|favicon.ico|api/cron|api/health|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 };

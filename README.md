@@ -106,16 +106,47 @@ npm run db:types   # regenerate database types from the linked project
 
 ## Deployment
 
-Deploys to the **company Vercel team account** only — this app holds client content and
-creative assets, so personal Vercel, Netlify, Replit, and free-tier hosts are out.
+Host this only on company-controlled infrastructure — it holds client content and creative
+assets. Personal Vercel, Netlify, Replit, and free-tier hosts are out.
 
-`vercel.json` registers two cron jobs:
+Two things must be true wherever it runs: the app is served, and the two background
+workers are triggered on a schedule. The workers are not optional — without them approved
+creatives never reach Drive and scheduled cards never advance.
 
-- `/api/cron/drive-sync` every 5 minutes — uploads approved creatives to Drive
-- `/api/cron/scheduler` every 10 minutes — advances cards whose publish slot has arrived
+| Endpoint | Cadence | Does |
+| --- | --- | --- |
+| `/api/cron/drive-sync` | every 5 min | Uploads approved creatives to Drive |
+| `/api/cron/scheduler` | every 10 min | Advances cards whose publish slot has arrived |
 
-Both authenticate with `Bearer $CRON_SECRET` and are excluded from the auth middleware.
-Set `CRON_SECRET` in Vercel before the first deploy, or both routes return 401.
+Both authenticate with `Authorization: Bearer $CRON_SECRET` and are excluded from the auth
+middleware. Set `CRON_SECRET` before the first deploy, or both return 401.
+
+### Container (self-hosted platforms)
+
+```bash
+docker build -t contentops \
+  --build-arg NEXT_PUBLIC_SUPABASE_URL=https://YOUR_REF.supabase.co \
+  --build-arg NEXT_PUBLIC_SUPABASE_ANON_KEY=YOUR_ANON_KEY \
+  --build-arg NEXT_PUBLIC_APP_URL=https://YOUR_APP .
+```
+
+`NEXT_PUBLIC_*` values are inlined into the client bundle at build time, so they are build
+args and changing them means rebuilding. Every other variable — service-role key, Google
+credentials, `CRON_SECRET` — is read at runtime and must be injected as a secret, never
+baked into the image.
+
+The container listens on `3000` and serves an unauthenticated liveness probe at
+`/api/health`. Point the platform's health check there.
+
+For the schedule, either use the platform's own cron, or run it from Postgres by applying
+`supabase/optional/scheduled_jobs.sql` — that uses `pg_cron` + `pg_net` to call the two
+endpoints, so the workers keep running regardless of where the app is hosted. Read the
+header of that file first; it needs two database settings, and applying it **on Vercel
+would double-fire** the jobs that `vercel.json` already registers.
+
+### Vercel
+
+`vercel.json` registers both cron jobs; deploy as-is and do not apply the optional SQL.
 
 ## Layout
 

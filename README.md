@@ -168,8 +168,7 @@ Set at least one before the first deploy, or both routes return 401 and nothing 
 ```bash
 docker build -t contentops \
   --build-arg NEXT_PUBLIC_SUPABASE_URL=https://YOUR_REF.supabase.co \
-  --build-arg NEXT_PUBLIC_SUPABASE_ANON_KEY=YOUR_ANON_KEY \
-  --build-arg NEXT_PUBLIC_APP_URL=https://YOUR_APP .
+  --build-arg NEXT_PUBLIC_SUPABASE_ANON_KEY=YOUR_ANON_KEY .
 ```
 
 `NEXT_PUBLIC_*` values are inlined into the client bundle at build time, so they are build

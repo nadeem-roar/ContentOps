@@ -19,7 +19,7 @@ Where ContentOps actually runs, as of 2026-09-14. No secrets here — IDs and UR
 | URL | https://titpmpvwckvpfbiwtvyc.supabase.co |
 | Org | `lagqxxowrsxljkutmrmg` |
 | Plan | Free. Metadata only, so the 500 MB limit is not a concern |
-| Migrations | 0001–0005 applied |
+| Migrations | 0001–0006 applied |
 
 | | |
 | --- | --- |
@@ -57,21 +57,30 @@ Sign-in breaks if any of these is removed.
 - Google OAuth client: `https://contentops-acd1.roarai.app/auth/callback`,
   `https://titpmpvwckvpfbiwtvyc.supabase.co/auth/v1/callback`, `http://localhost:53682/`
 
+## Scheduled jobs
+
+Both registered and verified returning 200.
+
+| Job | Path | Schedule | Id |
+| --- | --- | --- | --- |
+| File approved creatives | `/api/cron/file-creatives` | `*/5 * * * *` | `ec66702e-9458-49cc-ba40-771d69c1f64b` |
+| Publish scheduler | `/api/cron/scheduler` | `*/10 * * * *` | `0d21d16a-19ea-403e-91c8-5faf824f6116` |
+
+**Redeploy after creating or changing a job.** Roar injects `ROAR_CRON_SECRET` into the
+container at deploy time, so a job created after the last deploy authenticates against a
+variable the running process does not have, and every run returns 401 while the console
+shows the job as scheduled. Both jobs failed exactly this way until a redeploy; nothing in
+the app needed changing.
+
+`list_env_vars` does not show `ROAR_CRON_SECRET` even when it is present, so it is not a
+reliable check. Run a job and read the HTTP status instead.
+
 ## Still to do
 
-1. **Register the two scheduled jobs** in Roar — without them, approved creatives never
-   reach Drive and scheduled cards never advance:
-   - `/api/cron/file-creatives` on `*/5 * * * *`
-   - `/api/cron/scheduler` on `*/10 * * * *`
-2. **Verify `ROAR_CRON_SECRET` is injected.** Roar's scheduler authenticates with an
-   `x-roar-cron-secret` header, and `src/lib/cron-auth.ts` only checks that header when the
-   matching variable is present. If Roar does not inject it, both jobs return 401 while
-   appearing scheduled. If that happens, set `ROAR_CRON_SECRET` to the same value as
-   `CRON_SECRET` — the code accepts either.
-3. **End-to-end test**: client → campaign → card → upload → drag to Approved, then confirm
+1. **End-to-end test**: client → campaign → card → upload → drag to Approved, then confirm
    the file lands in `ContentOps Creatives/<Client>/<Campaign>/Final/` renamed to the
    convention.
-4. **Delete the unused Supabase project** `tzcyzuxoxjbvkaleksny` (Sydney). Empty, replaced
+2. **Delete the unused Supabase project** `tzcyzuxoxjbvkaleksny` (Sydney). Empty, replaced
    by the Singapore one.
 
 ## Open questions

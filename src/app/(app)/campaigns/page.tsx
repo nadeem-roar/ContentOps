@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { format, parseISO } from 'date-fns';
 import { createClient } from '@/lib/supabase/server';
 import { Badge } from '@/components/ui/badge';
+import { NewCampaignDialog } from '@/components/new-campaign-dialog';
 import type { CampaignStatus, StageType } from '@/lib/types';
 
 export const metadata = { title: 'Campaigns · ContentOps' };
@@ -29,7 +30,10 @@ export default async function CampaignsPage() {
     supabase.from('board_cards').select('campaign_id, column_id'),
   ]);
 
-  const { data: columns } = await supabase.from('board_columns').select('id, stage');
+  const [{ data: columns }, { data: clientOptions }] = await Promise.all([
+    supabase.from('board_columns').select('id, stage'),
+    supabase.from('clients').select('id, name').eq('is_archived', false).order('name'),
+  ]);
   const stageOf = new Map((columns ?? []).map((c) => [c.id, c.stage as StageType]));
 
   const progress = new Map<string, Map<StageType, number>>();
@@ -45,7 +49,10 @@ export default async function CampaignsPage() {
 
   return (
     <div className="mx-auto max-w-5xl p-4">
-      <h1 className="mb-4 text-lg font-semibold">Campaigns</h1>
+      <header className="mb-4 flex items-center gap-3">
+        <h1 className="text-lg font-semibold">Campaigns</h1>
+        <NewCampaignDialog clients={clientOptions ?? []} />
+      </header>
 
       {(campaigns ?? []).length === 0 ? (
         <p className="rounded-lg border border-dashed p-10 text-center text-sm text-muted-foreground">

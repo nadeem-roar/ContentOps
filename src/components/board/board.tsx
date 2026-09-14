@@ -18,16 +18,18 @@ import type { BoardColumn } from '@/lib/types';
 import { Column } from './column';
 import { CardTile, type BoardCardRow } from './card-tile';
 import { BoardFilters } from './filters';
+import { NewCardDialog } from './new-card-dialog';
 import { Alert } from './alert';
 
 interface BoardProps {
   columns: BoardColumn[];
   cards: BoardCardRow[];
   clients: { id: string; name: string; slug: string }[];
+  campaigns: { id: string; name: string; client_id: string }[];
   activeFilters: { client?: string; campaign?: string; mine?: string };
 }
 
-export function Board({ columns, cards, clients, activeFilters }: BoardProps) {
+export function Board({ columns, cards, clients, campaigns, activeFilters }: BoardProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [, startTransition] = useTransition();
@@ -136,7 +138,12 @@ export function Board({ columns, cards, clients, activeFilters }: BoardProps) {
 
   return (
     <div className="flex h-[calc(100vh-3.5rem)] flex-col">
-      <BoardFilters clients={clients} active={activeFilters} onChange={setFilter} />
+      <BoardFilters
+        clients={clients}
+        active={activeFilters}
+        onChange={setFilter}
+        action={<NewCardDialog clients={clients} campaigns={campaigns} />}
+      />
 
       {blockers ? (
         <Alert

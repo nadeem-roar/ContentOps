@@ -7,10 +7,12 @@ export function BoardFilters({
   clients,
   active,
   onChange,
+  action,
 }: {
   clients: { id: string; name: string; slug: string }[];
   active: { client?: string; mine?: string };
   onChange: (key: string, value: string | null) => void;
+  action?: React.ReactNode;
 }) {
   return (
     <div className="flex flex-wrap items-center gap-2 border-b px-4 py-2.5">
@@ -43,6 +45,8 @@ export function BoardFilters({
           {client.name}
         </Button>
       ))}
+
+      {action ? <div className="ml-auto">{action}</div> : null}
     </div>
   );
 }

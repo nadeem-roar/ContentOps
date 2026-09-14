@@ -22,17 +22,24 @@ export default async function BoardPage({
   if (filters.campaign) cardQuery = cardQuery.eq('campaign_id', filters.campaign);
   if (filters.mine === '1' && user) cardQuery = cardQuery.eq('assignee_id', user.id);
 
-  const [{ data: columns }, { data: cards }, { data: clients }] = await Promise.all([
-    supabase.from('board_columns').select('*').order('position'),
-    cardQuery,
-    supabase.from('clients').select('id, name, slug').eq('is_archived', false).order('name'),
-  ]);
+  const [{ data: columns }, { data: cards }, { data: clients }, { data: campaigns }] =
+    await Promise.all([
+      supabase.from('board_columns').select('*').order('position'),
+      cardQuery,
+      supabase.from('clients').select('id, name, slug').eq('is_archived', false).order('name'),
+      supabase
+        .from('campaigns')
+        .select('id, name, client_id')
+        .neq('status', 'archived')
+        .order('name'),
+    ]);
 
   return (
     <Board
       columns={(columns ?? []) as BoardColumn[]}
       cards={cards ?? []}
       clients={clients ?? []}
+      campaigns={campaigns ?? []}
       activeFilters={filters}
     />
   );

@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { CalendarDays, Inbox, LayoutGrid, Megaphone, LogOut } from 'lucide-react';
+import { Building2, CalendarDays, Inbox, LayoutGrid, Megaphone, LogOut } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -13,6 +13,7 @@ const LINKS = [
   { href: '/board', label: 'Board', icon: LayoutGrid },
   { href: '/calendar', label: 'Calendar', icon: CalendarDays },
   { href: '/campaigns', label: 'Campaigns', icon: Megaphone },
+  { href: '/clients', label: 'Clients', icon: Building2 },
   { href: '/inbox', label: 'Inbox', icon: Inbox },
 ] as const;
 

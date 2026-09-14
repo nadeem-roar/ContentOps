@@ -6,32 +6,52 @@ const SCOPES = ['https://www.googleapis.com/auth/drive'];
 let cached: drive_v3.Drive | null = null;
 
 /**
- * Drive client backed by the company service account. Domain-wide delegation lets it
- * act as an ops user so files land with sane ownership inside the shared drive rather
- * than being owned by a service account nobody can find.
+ * Drive client, authenticated one of two ways.
+ *
+ * 1. OAuth refresh token (preferred). Works under the common org policy
+ *    `iam.disableServiceAccountKeyCreation`, which forbids downloadable service account
+ *    keys. A one-time consent by an ops user yields a refresh token; the library trades
+ *    it for access tokens from then on. Get one with `npm run drive:token`.
+ *
+ * 2. Service account key. Simpler where the org allows key creation.
+ *
+ * OAuth wins when both are configured, because an org that set the policy meant it.
  */
 export function getDrive(): drive_v3.Drive {
   if (cached) return cached;
 
+  const refreshToken = process.env.GOOGLE_OAUTH_REFRESH_TOKEN;
+  const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET;
+
+  if (refreshToken && clientId && clientSecret) {
+    const auth = new google.auth.OAuth2({ clientId, clientSecret });
+    auth.setCredentials({ refresh_token: refreshToken });
+    cached = google.drive({ version: 'v3', auth });
+    return cached;
+  }
+
   const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
   const rawKey = process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY;
 
-  if (!email || !rawKey) {
-    throw new Error(
-      'Google Drive is not configured. Set GOOGLE_SERVICE_ACCOUNT_EMAIL and GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY.',
-    );
+  if (email && rawKey) {
+    const auth = new google.auth.JWT({
+      email,
+      // Hosts store the key with literal \n sequences.
+      key: rawKey.replace(/\\n/g, '\n'),
+      scopes: SCOPES,
+      subject: process.env.GOOGLE_DRIVE_IMPERSONATE_USER || undefined,
+    });
+
+    cached = google.drive({ version: 'v3', auth });
+    return cached;
   }
 
-  const auth = new google.auth.JWT({
-    email,
-    // Vercel stores the key with literal \n sequences.
-    key: rawKey.replace(/\\n/g, '\n'),
-    scopes: SCOPES,
-    subject: process.env.GOOGLE_DRIVE_IMPERSONATE_USER || undefined,
-  });
-
-  cached = google.drive({ version: 'v3', auth });
-  return cached;
+  throw new Error(
+    'Google Drive is not configured. Set either GOOGLE_OAUTH_CLIENT_ID + ' +
+      'GOOGLE_OAUTH_CLIENT_SECRET + GOOGLE_OAUTH_REFRESH_TOKEN, or ' +
+      'GOOGLE_SERVICE_ACCOUNT_EMAIL + GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY.',
+  );
 }
 
 const FOLDER_MIME = 'application/vnd.google-apps.folder';

@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "db:types": "supabase gen types typescript --linked > src/lib/supabase/database.types.ts"
+    "db:types": "supabase gen types typescript --linked > src/lib/supabase/database.types.ts",
+    "drive:token": "node scripts/get-drive-token.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.1.0",

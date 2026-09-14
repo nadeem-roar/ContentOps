@@ -87,10 +87,34 @@ promoted from the profiles table.
 
 ### 3. Google Drive
 
-In the **company GCP project**: create a service account, enable the Drive API, and grant
-it domain-wide delegation for `https://www.googleapis.com/auth/drive`. Share the target
-shared drive (or root folder) with the service account, and put the folder ID in
-`GOOGLE_DRIVE_ROOT_FOLDER_ID`.
+Create a **Shared Drive** for the creatives and put its ID in `GOOGLE_DRIVE_ROOT_FOLDER_ID`.
+A Shared Drive rather than a My Drive folder matters: a service account has no storage
+quota of its own, so uploads into a personal folder fail on quota. In a Shared Drive the
+drive owns the files.
+
+Then authenticate one of two ways. Enable the **Google Drive API** either way.
+
+**Option A — OAuth refresh token.** Use this when the organisation enforces
+`iam.disableServiceAccountKeyCreation`, which blocks downloadable service account keys.
+
+1. Credentials → Create credentials → OAuth client ID → **Web application**
+2. Add `http://localhost:53682/` as an authorised redirect URI
+3. Run the one-time consent, signing in as the account that should own the files:
+
+```bash
+GOOGLE_OAUTH_CLIENT_ID=... GOOGLE_OAUTH_CLIENT_SECRET=... npm run drive:token
+```
+
+4. Store the printed refresh token as `GOOGLE_OAUTH_REFRESH_TOKEN`
+
+The token is tied to that user, so use a durable ops account rather than someone who might
+leave. Revoking the app at myaccount.google.com breaks Drive sync until you re-run this.
+
+**Option B — service account key.** Where the org permits key creation: create a service
+account, download a JSON key, and add the service account's email as a **Content manager**
+of the Shared Drive. Domain-wide delegation is not needed for this path.
+
+If both are configured, OAuth is used.
 
 ### 4. Environment
 

@@ -12,6 +12,7 @@
  */
 
 import http from 'node:http';
+import { spawn } from 'node:child_process';
 import { URL } from 'node:url';
 import { google } from 'googleapis';
 
@@ -39,9 +40,34 @@ const authUrl = oauth2.generateAuthUrl({
   prompt: 'consent',
 });
 
-console.log('\nOpen this URL, sign in as the account that should own the Drive files:\n');
+console.log('\nA browser window should open. Sign in as the account that should own the');
+console.log('Drive files, and approve the Drive permission.\n');
+console.log('If nothing opens, copy this URL into your browser by hand:\n');
 console.log(authUrl);
 console.log('\nWaiting for the redirect…\n');
+
+/**
+ * Opens the consent page in the default browser. Best effort: failing is not fatal.
+ *
+ * Windows goes through rundll32 rather than `cmd /c start`, because cmd treats the `&`
+ * between query parameters as a command separator and hands the browser a URL truncated
+ * at the first one — which Google rejects for a missing response_type.
+ */
+function openBrowser(target) {
+  const commands = {
+    win32: ['rundll32', ['url.dll,FileProtocolHandler', target]],
+    darwin: ['open', [target]],
+  };
+  const [cmd, args] = commands[process.platform] ?? ['xdg-open', [target]];
+
+  try {
+    spawn(cmd, args, { stdio: 'ignore', detached: true }).unref();
+  } catch {
+    // The URL is printed above; the user can open it themselves.
+  }
+}
+
+openBrowser(authUrl);
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, REDIRECT_URI);
